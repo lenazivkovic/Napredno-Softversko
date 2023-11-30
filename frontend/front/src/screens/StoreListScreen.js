@@ -1,0 +1,216 @@
+import React, { useContext, useEffect, useReducer } from 'react';
+import axios from 'axios';
+
+import { Store1 } from '../Store';
+import LoadingSign from '../components/LoadingSign';
+import MessageBox from '../components/MessageBox';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import Row from 'react-bootstrap/Row';
+import Col from 'react-bootstrap/Col';
+import Button from 'react-bootstrap/Button';
+import { toast } from 'react-toastify';
+import { getError } from '../utils';
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'FETCH_REQUEST':
+      return { ...state, loading: true };
+    case 'FETCH_SUCCESS':
+      return {
+        ...state,
+        stores: action.payload.stores,
+        page: action.payload.page,
+        pages: action.payload.pages,
+        loading: false,
+      };
+    case 'FETCH_FAIL':
+      return { ...state, loading: false, error: action.payload };
+    case 'CREATE_REQUEST':
+      return { ...state, loadingCreate: true };
+    case 'CREATE_SUCCESS':
+      return {
+        ...state,
+        loadingCreate: false,
+      };
+    case 'CREATE_FAIL':
+      return { ...state, loadingCreate: false };
+    case 'DELETE_REQUEST':
+      return { ...state, loadingDelete: true, successDelete: false };
+    case 'DELETE_SUCCESS':
+      return {
+        ...state,
+        loadingDelete: false,
+        successDelete: true,
+      };
+    case 'DELETE_FAIL':
+      return { ...state, loadingDelete: false, successDelete: false };
+
+    case 'DELETE_RESET':
+      return { ...state, loadingDelete: false, successDelete: false };
+    default:
+      return state;
+  }
+};
+
+export default function StoreListScreen() {
+  const [
+    {
+      loading,
+      error,
+      stores,
+      pages,
+      loadingCreate,
+      loadingDelete,
+      successDelete,
+    },
+    dispatch,
+  ] = useReducer(reducer, {
+    loading: true,
+    error: '',
+  });
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  const sp = new URLSearchParams(search);
+  const page = sp.get('page') || 1;
+
+  const { state } = useContext(Store1);
+  const { userInfo } = state;
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { data } = await axios.get(
+          `http://localhost:3000/api/v1/stores/findStores?page=${page} `,
+          {
+            ///api/stores/admin?page=${page}
+            headers: { Authorization: `Bearer ${userInfo.token}` },
+          }
+        );
+
+        dispatch({ type: 'FETCH_SUCCESS', payload: data.data });
+      } catch (err) {}
+    };
+    if (successDelete) {
+      dispatch({ type: 'DELETE_RESET' });
+    } else {
+      fetchData();
+    }
+  }, [page, userInfo, successDelete]);
+
+  const createHandler = async () => {
+    if (window.confirm('Are you sure to create?')) {
+      try {
+        dispatch({ type: 'CREATE_REQUEST' });
+        const { data } = await axios.post(
+          '/api/products',
+          {},
+          {
+            headers: { Authorization: `Bearer ${userInfo.token}` },
+          }
+        );
+        toast.success('store created successfully');
+        dispatch({ type: 'CREATE_SUCCESS' });
+        navigate(`/admin/store/${data.store._id}`);
+      } catch (err) {
+        toast.error(getError(error));
+        dispatch({
+          type: 'CREATE_FAIL',
+        });
+      }
+    }
+  };
+  const deleteHandler = async (store) => {
+    if (window.confirm('Da li ste sigurni da zelite da obrisete prodvnicu?')) {
+      try {
+        await axios.delete(`http://localhost:3000/api/v1/stores/${store._id}`, {
+          headers: { Authorization: `Bearer ${userInfo.token}` },
+        });
+        toast.success('Prodavnica uspešno obrisana');
+        dispatch({ type: 'DELETE_SUCCESS' });
+      } catch (err) {
+        toast.error(getError(error));
+        dispatch({
+          type: 'DELETE_FAIL',
+        });
+      }
+    }
+  };
+function klikni(){
+  navigate('/leadadmin/addstore');
+}
+  return (
+    <div>
+      <Row>
+        <Col>
+          <h1>Prodavnice</h1>
+        </Col>
+        <Col className="col text-end">
+          <div>
+            <Button type="button" onClick={klikni} > {/*onClick={createHandler}>*/}
+             Dodaj prodavnicu
+            </Button>
+          </div>
+        </Col>
+      </Row>
+
+      {loadingCreate && <LoadingSign></LoadingSign>}
+      {loadingDelete && <LoadingSign></LoadingSign>}
+      {loading ? (
+        <LoadingSign></LoadingSign>
+      ) : error ? (
+        <MessageBox variant="danger">{error}</MessageBox>
+      ) : (
+        <>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>IME</th>
+                <th>KATEGORIJA</th>
+                <th>AKCIJE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stores.map((s) => (
+                <tr key={s._id}>
+                  <td>{s._id}</td>
+                  <td>{s.name}</td>
+                 
+                  <td>{s.category}</td>
+
+                  <td>
+                    <Button
+                      type="button"
+                      variant="light"
+                      onClick={() => navigate(`/leadadmin/stores/${s._id}`)}
+                    >
+                      Izmeni
+                    </Button>
+                    &nbsp;
+                    <Button
+                      type="button"
+                      variant="light"
+                      onClick={() => deleteHandler(s)}
+                    >
+                      Obriši
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div>
+            {[...Array(pages).keys()].map((x) => (
+              <Link
+                className={x + 1 === Number(page) ? 'btn text-bold' : 'btn'}
+                key={x + 1}
+                to={`/leadadmin/stores?page=${x + 1}`}
+              >
+                {x + 1}
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
